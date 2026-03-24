@@ -1,4 +1,4 @@
-# Ender3V2 stm32 based 4.2.2 mainboard 2022 Firmware Reproduction
+# Ender3V2 stm32 based 4.2.2 mainboard 2022 Firmware Reproduction (which is not 100% compatible with Gigadevices' GD32 that Creality switched to later)
 
 This section documents how to reproduce as close to a byte-for-byte identical firmware binary as I could manage from the January 2022 state of this repository using a hermetic, fully offline container build. No live PlatformIO registry access is required.
 
