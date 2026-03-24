@@ -1,6 +1,6 @@
 # Ender3V2 stm32 based 4.2.2 mainboard 2022 Firmware Reproduction
 
-This section documents how to reproduce a byte-for-byte identical firmware binary from the January 2022 state of this repository using a hermetic, fully offline container build. No live PlatformIO registry access is required.
+This section documents how to reproduce as close to a byte-for-byte identical firmware binary as I could manage from the January 2022 state of this repository using a hermetic, fully offline container build. No live PlatformIO registry access is required.
 
 ## Background
 
