@@ -1,0 +1,104 @@
+# PlatformIO 5.2.4 bit-perfect build container for Creality Ender-3 V2 (Jan 2022)
+#
+# WHY LOCAL ARCHIVES?
+# The live PlatformIO registry now serves ststm32 platform metadata that requires
+# PIO Core >= 6. Our local copy of ststm32-12.1.1 retains the original
+# engines.platformio=^5 field, allowing clean installation with PIO 5.2.4.
+# All other packages (toolchain, frameworks, tools) are pre-seeded from local
+# archives to guarantee the exact bit-perfect tool versions used in January 2022.
+#
+# USAGE:
+#   # Build image (requires internet for tool-scons core package):
+#   podman build -f docker/Dockerfile.pio5 -t pio5-bitperfect .
+#
+#   # Run a build (volume-mount for live source edits):
+#   podman run --rm -v "$PWD":/workspace:Z pio5-bitperfect
+#
+#   # Or run the baked-in copy:
+#   podman run --rm pio5-bitperfect
+
+FROM python:3.10-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin PlatformIO Core 5.2.4 — the most recent release before Jan 18 2022
+RUN pip install --no-cache-dir "platformio==5.2.4"
+
+# Silence telemetry and automatic update checks
+ENV PLATFORMIO_SETTING_ENABLE_TELEMETRY=No
+ENV PLATFORMIO_SETTING_CHECK_PLATFORMIO_INTERVAL=0
+ENV PLATFORMIO_SETTING_CHECK_PLATFORMS_INTERVAL=0
+ENV PLATFORMIO_SETTING_CHECK_LIBRARIES_INTERVAL=0
+
+# ── Package pre-seeding ─────────────────────────────────────────────────────────
+# Copy the downloaded historical archives into the image for offline installation.
+COPY piopackages/archives/ /pio-bootstrap/
+
+# Pre-extract build-specific packages into PlatformIO's global package store.
+# Packages are identified by the 'name' field in their embedded package.json,
+# so each archive must land in the directory PIO expects.
+# A .piopm sidecar with owner="platformio" is REQUIRED so that PIO 5's
+# test_pkg_spec() matches them when the platform spec carries the owner prefix.
+RUN set -eux && \
+    PKG=/root/.platformio/packages && \
+    mkdir -p "$PKG" && \
+    \
+    # GCC ARM toolchain 1.70201.0 (GCC 7.2.1) — the January 2022 compiler
+    mkdir "$PKG/toolchain-gccarmnoneeabi" && \
+    tar -xzf /pio-bootstrap/toolchain-gccarmnoneeabi-1.70201.0.tar.gz \
+        -C "$PKG/toolchain-gccarmnoneeabi" && \
+    printf '{"type":"tool","name":"toolchain-gccarmnoneeabi","version":"1.70201.0","spec":{"owner":"platformio","id":null,"name":"toolchain-gccarmnoneeabi","requirements":null,"url":null}}\n' \
+        > "$PKG/toolchain-gccarmnoneeabi/.piopm" && \
+    \
+    # Maple / Arduino STM32 framework 3.10000.201129
+    mkdir "$PKG/framework-arduinoststm32-maple" && \
+    tar -xzf /pio-bootstrap/framework-arduinoststm32-maple-3.10000.201129.tar.gz \
+        -C "$PKG/framework-arduinoststm32-maple" && \
+    printf '{"type":"tool","name":"framework-arduinoststm32-maple","version":"3.10000.201129","spec":{"owner":"platformio","id":null,"name":"framework-arduinoststm32-maple","requirements":null,"url":null}}\n' \
+        > "$PKG/framework-arduinoststm32-maple/.piopm" && \
+    \
+    # STM32Duino DFU / reset tool 1.0.1
+    mkdir "$PKG/tool-stm32duino" && \
+    tar -xzf /pio-bootstrap/tool-stm32duino-1.0.1.tar.gz \
+        -C "$PKG/tool-stm32duino" && \
+    printf '{"type":"tool","name":"tool-stm32duino","version":"1.0.1","spec":{"owner":"platformio","id":null,"name":"tool-stm32duino","requirements":null,"url":null}}\n' \
+        > "$PKG/tool-stm32duino/.piopm"
+
+# ── Platform installation ───────────────────────────────────────────────────────
+# Install ststm32 12.1.1 from the LOCAL archive, bypassing the live registry.
+# The registry now serves a modified version requiring PIO Core >=6; our local
+# copy retains the original engines.platformio=^5 which passes PIO 5.2.4's check.
+# --skip-default-package: skip auto-downloading all platform package dependencies;
+# the build-specific packages are already pre-seeded above. When `pio run` fires,
+# it resolves packages from the local cache without touching the registry.
+RUN platformio platform install \
+    "file:///pio-bootstrap/ststm32-12.1.1.tar.gz" \
+    --skip-default-package
+
+# ── Core package bootstrap ──────────────────────────────────────────────────────
+# PIO 5's build system requires tool-scons@~4.40300.0 (SCons 4.3.0) but the
+# registry now blocks PIO 5 client requests. We create a synthetic shim:
+#   - pip-install SCons 4.3.0 into the standard Python path
+#   - plant a minimal package.json + scons.py in ~/.platformio/packages/tool-scons/
+# PIO calls: python3 <scons_dir>/scons.py -Q --sconstruct <builder>/main.py ...
+# The scons.py just delegates to the pip-installed SCons.Script.main().
+RUN pip install --no-cache-dir "scons==4.3.0" && \
+    SCONS_PKG=/root/.platformio/packages/tool-scons && \
+    mkdir -p "$SCONS_PKG" && \
+    printf '{"name":"tool-scons","version":"4.40300.0","description":"SCons 4.3.0 shim"}\n' \
+        > "$SCONS_PKG/package.json" && \
+    printf '{"type":"tool","name":"tool-scons","version":"4.40300.0","spec":{"owner":"platformio","id":null,"name":"tool-scons","requirements":null,"url":null}}\n' \
+        > "$SCONS_PKG/.piopm" && \
+    printf 'import sys\nimport SCons.Script\nSCons.Script.main()\n' \
+        > "$SCONS_PKG/scons.py"
+
+# ── Project source ──────────────────────────────────────────────────────────────
+WORKDIR /workspace
+COPY . /workspace
+
+# Default build target — override at run time if needed
+CMD ["platformio", "run", "-e", "STM32F103RET6_creality"]

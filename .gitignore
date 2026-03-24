@@ -118,6 +118,9 @@ tags
 .pio*
 .pioenvs
 .piolibdeps
+
+# PIO package archives (large binaries — use piopackages/scripts/download_legacy.sh to fetch)
+piopackages/archives/
 .clang_complete
 .gcc-flags.json
 /lib/

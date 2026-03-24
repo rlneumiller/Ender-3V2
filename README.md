@@ -1,3 +1,76 @@
+# Ender3V2 stm32 based 4.2.2 mainboard 2022 Firmware Reproduction
+
+This section documents how to reproduce a byte-for-byte identical firmware binary from the January 2022 state of this repository using a hermetic, fully offline container build. No live PlatformIO registry access is required.
+
+## Background
+
+The PlatformIO registry (`registry.platformio.org`) now blocks all PIO 5.x clients with an HTTP error requiring an upgrade to PIO 6. The ststm32 platform package on the live registry was also updated to require PIO 6. To reproduce the exact 2022 toolchain:
+
+- **PlatformIO Core**: 5.2.4 (latest release before Jan 18, 2022)
+- **Platform**: `ststm32` 12.1.1 (local archive, `engines.platformio: "^5"`)
+- **Toolchain**: `toolchain-gccarmnoneeabi` 1.70201.0 → GCC ARM 7.2.1
+- **Framework**: `framework-arduinoststm32-maple` 3.10000.201129
+- **Upload tool**: `tool-stm32duino` 1.0.1
+- **Build system**: `tool-scons` 4.3.0 (via `pip`, synthetic shim package)
+
+The required package archives are stored in `piopackages/archives/`. The container image bakes all packages in at build time so no network access is needed at run time.
+
+## Prerequisites
+
+- [Podman](https://podman.io/) (or Docker — substitute `docker` for `podman`)
+- The package archives already present under `piopackages/archives/`
+
+## Build the Container Image
+
+```bash
+podman build -f docker/Dockerfile.pio5 -t localhost/pio5-bitperfect .
+```
+
+This produces a tagged image `localhost/pio5-bitperfect` with PIO 5.2.4 and all toolchain packages pre-seeded. The image is fully self-contained and requires no internet access at run time.
+
+## Compile the Firmware
+
+```bash
+podman run --rm -v "$PWD":/workspace:Z localhost/pio5-bitperfect
+```
+
+The `:Z` suffix on the volume mount is required on SELinux-enabled systems (Fedora, RHEL, etc.). On non-SELinux systems use `-v "$PWD":/workspace` without `:Z`.
+
+On success you will see:
+
+```
+PLATFORM: ST STM32 (12.1.1) > STM32F103RE (64k RAM. 512k Flash)
+PACKAGES:
+ - framework-arduinoststm32-maple 3.10000.201129 (1.0.0)
+ - tool-stm32duino 1.0.1
+ - toolchain-gccarmnoneeabi 1.70201.0 (7.2.1)
+...
+========================= [SUCCESS] ...
+```
+
+The firmware binary is written to:
+
+```
+.pio/build/STM32F103RET6_creality/firmware.bin
+```
+
+## Notes and Known Pitfalls
+
+**Stale `.piopm` files from older PIO 5.x builds**  
+If `.pio/libdeps/` contains `.piopm` files written by an older PIO 5.x release (before the `uri` → `url` field rename), the build will fail with:
+```
+TypeError: PackageSpec.__init__() got an unexpected keyword argument 'uri'
+```
+Fix: replace `"uri"` with `"url"` in any affected `.piopm` file under `.pio/libdeps/`, or delete the file. PIO will regenerate it from the library's own manifest.
+
+**Platform `.piopm` owner field**  
+PIO 5.2.4's `test_pkg_spec()` rejects pre-seeded packages whose `.piopm` has `owner: null` when the requesting spec includes `owner: "platformio"`. The Dockerfile writes explicit `.piopm` files with `"owner":"platformio"` for all four pre-seeded packages to work around this.
+
+**Registry is fully bypassed**  
+The environment variables `PLATFORMIO_SETTING_ENABLE_TELEMETRY=false`, `PLATFORMIO_SETTING_CHECK_PLATFORMIO_INTERVAL=0`, and `PLATFORMIO_SETTING_CHECK_PLATFORMS_INTERVAL=0` disable all outbound registry calls during the build. The "Failed to check for PlatformIO upgrades" warning at the end is expected and harmless.
+
+---
+
 # Ender-3 V2 Firmware
 
 Creality attaches great importance to users. As 3D printing industry evangelist, Creality, dedicating to bringing benefits to human beings via technology innovations, has received support from both users and 3D printing enthusiasts. With gratefulness, Creality wants to continue the pace of making the world a better place with you all. This time, Creality will open the source code and we believe GitHub is the way to go. 
