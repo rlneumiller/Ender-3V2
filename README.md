@@ -18,7 +18,31 @@ The required package archives are stored in `piopackages/archives/`. The contain
 ## Prerequisites
 
 - [Podman](https://podman.io/) (or Docker — substitute `docker` for `podman`)
-- The package archives already present under `piopackages/archives/`
+- The package archives under `piopackages/archives/` (see below)
+
+## Package Archives
+
+The toolchain archives are too large to store in the git tree (~151 MB total) and the original PlatformIO CDN now blocks all PIO 5.x clients. To solve both problems, the archives are hosted as assets on a dedicated GitHub Release on this fork:
+
+**https://github.com/rlneumiller/Ender-3V2/releases/tag/pio5-toolchain-archives-2022**
+
+| Asset | Size | Description |
+|---|---|---|
+| `ststm32-12.1.1.tar.gz` | 5.6 MB | ststm32 platform (engines: PIO ^5) |
+| `framework-arduinoststm32-maple-3.10000.201129.tar.gz` | 35 MB | Arduino_STM32 maple core |
+| `toolchain-gccarmnoneeabi-1.70201.0.tar.gz` | 109 MB | GCC ARM 7.2.1 |
+| `tool-stm32duino-1.0.1.tar.gz` | 929 KB | STM32duino upload tool |
+
+To download all archives to the correct location, run from the repository root:
+
+```bash
+bash piopackages/scripts/download_legacy.sh
+```
+
+The script tries the GitHub Release URL first, then falls back to the original upstream sources where they exist. It is safe to run repeatedly — already-present files are skipped.
+
+**Why a GitHub Release and not git-lfs or the git tree?**  
+GitHub Release assets are stored outside the git object graph. They survive repository ownership transfers and are included in GitHub's archival partnerships (Software Heritage / Arctic Vault). They also have no per-file size limit (up to 2 GB) and do not consume LFS bandwidth quota. The download script documents the original source of each archive so the files can be reconstructed from upstream if the release is ever lost.
 
 ## Build the Container Image
 
